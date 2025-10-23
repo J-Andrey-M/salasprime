@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Sequência de Carrinhos</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <style>
+        /* CSS (Idêntico ao anterior) */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px 0;
+        }
+        .container {
+            background: #fff;
+            padding: 25px 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 90%;
+            max-width: 500px;
+        }
+        h1 {
+            color: #444;
+            margin-bottom: 20px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="number"],
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box; 
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        button:disabled,
+        button:disabled:hover {
+            background-color: #aaa;
+            color: #eee;
+            cursor: not-allowed;
+        }
+
+        #resultado {
+            margin-top: 20px;
+            text-align: left;
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            word-wrap: break-word;
+        }
+        .carrinho-resultado {
+            margin-bottom: 15px;
+            border-bottom: 2px solid #ccc;
+            padding-bottom: 10px;
+        }
+        .carrinho-resultado:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        .carrinho-resultado h3 {
+            margin: 0 0 5px 0;
+            color: #0056b3;
+        }
+        .carrinho-resultado p {
+            margin: 4px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Gerador de Sequência de Carrinhos</h1>
+
+        <div class="input-group">
+            <label for="numero-inicial">Número Inicial da Contagem:</label>
+            <input type="number" id="numero-inicial" value="1">
+        </div>
+
+        <div class="input-group">
+            <label for="tamanho-carrinhos">Tablets por disciplina (Ex: 51, 40):</label>
+            <input type="text" id="tamanho-carrinhos" placeholder="Ex: 51, 40, 25" value="51, 40">
+        </div>
+
+        <div class="input-group">
+            <label for="numeros-excluidos">Números a Excluir (Ex: 15, 20-25):</label>
+            <input type="text" id="numeros-excluidos" placeholder="Ex: 15, 20-25">
+        </div>
+
+        <button onclick="gerarSequencia()">Gerar Sequências</button>
+        
+        <button id="btn-baixar" onclick="baixarRelatorio()" disabled>Baixar Relatório (.txt)</button>
+        
+        <button id="btn-baixar-pdf" onclick="baixarRelatorioPDF()" disabled>Baixar Relatório (.pdf)</button>
+        
+        <div id="resultado">
+            </div>
+    </div>
+
+    <script>
+        // --- Variáveis Globais ---
+        let dadosParaRelatorio = {};
+        let resultadosParaRelatorio = [];
+
+        // --- Função Principal ---
+        function gerarSequencia() {
+            // 1. Pega os valores
+            const numeroInicial = parseInt(document.getElementById('numero-inicial').value);
+            const stringTamanhos = document.getElementById('tamanho-carrinhos').value;
+            const stringExcluidos = document.getElementById('numeros-excluidos').value;
+            const divResultado = document.getElementById('resultado');
+            
+            const btnBaixar = document.getElementById('btn-baixar');
+            const btnBaixarPDF = document.getElementById('btn-baixar-pdf');
+
+            // Reseta os dados
+            dadosParaRelatorio = {};
+            resultadosParaRelatorio = [];
+            btnBaixar.disabled = true;
+            btnBaixarPDF.disabled = true;
+
+            // 2. Validações básicas
+            if (isNaN(numeroInicial)) {
+                divResultado.innerHTML = "<strong>Erro:</strong> 'Número Inicial' inválido.";
+                return;
+            }
+
+            // 3. Processa a string de TAMANHOS DOS CARRINHOS
+            const arrayTamanhos = stringTamanhos.split(',')
+                .map(s => parseInt(s.trim()))
+                .filter(n => !isNaN(n) && n > 0);
+
+            if (arrayTamanhos.length === 0) {
+                divResultado.innerHTML = "<strong>Erro:</strong> Por favor, insira tamanhos de carrinhos válidos (ex: 40, 30).";
+                return;
+            }
+
+            // 4. Processa a string de NÚMEROS A EXCLUIR
+            const setExcluidos = new Set();
+            if (stringExcluidos.trim() !== '') {
+                const regras = stringExcluidos.split(',');
+                regras.forEach(regra => {
+                    regra = regra.trim();
+                    if (regra.includes('-')) {
+                        const partes = regra.split('-');
+                        const inicio = parseInt(partes[0]);
+                        const fim = parseInt(partes[1]);
+                        if (!isNaN(inicio) && !isNaN(fim) && fim >= inicio) {
+                            for (let i = inicio; i <= fim; i++) setExcluidos.add(i);
+                        }
+                    } else {
+                        const num = parseInt(regra);
+                        if (!isNaN(num)) setExcluidos.add(num);
+                    }
+                });
+            }
+
+            // 5. LÓGICA PRINCIPAL
+            let htmlResultado = ""; 
+            let numeroAtual = numeroInicial;
+            let contadorBlocosGerados = 0;
+            
+            // Armazena os parâmetros
+            dadosParaRelatorio = {
+                numeroInicial: numeroInicial,
+                stringTamanhos: stringTamanhos,
+                stringExcluidos: stringExcluidos.trim() === '' ? 'Nenhum' : stringExcluidos
+            };
+
+            // Loop principal
+            for (let i = 0; i < arrayTamanhos.length; i++) {
+                
+                const tamanhoInput = arrayTamanhos[i]; 
+                const numeroEsteCarrinhoInput = i + 1;
+
+                let tamanhosParaProcessar = [];
+
+                if (tamanhoInput > 48) {
+                    const metade1 = Math.floor(tamanhoInput / 2);
+                    const metade2 = Math.ceil(tamanhoInput / 2);
+                    tamanhosParaProcessar = [metade1, metade2];
+                } else {
+                    tamanhosParaProcessar = [tamanhoInput];
+                }
+
+                // Loop interno
+                for (let j = 0; j < tamanhosParaProcessar.length; j++) {
+                    
+                    const tamanhoEsteCarrinho = tamanhosParaProcessar[j];
+                    const sequenciaCarrinho = []; 
+
+                    while (sequenciaCarrinho.length < tamanhoEsteCarrinho) {
+                        if (numeroAtual > numeroInicial + 100000) { 
+                            divResultado.innerHTML = "<strong>Erro:</strong> Loop infinito detectado.";
+                            return;
+                        }
+                        if (!setExcluidos.has(numeroAtual)) {
+                            sequenciaCarrinho.push(numeroAtual);
+                        }
+                        numeroAtual++;
+                    }
+
+                    // 6. Formata o resultado
+                    const primeiroNum = sequenciaCarrinho[0];
+                    const ultimoNum = sequenciaCarrinho[sequenciaCarrinho.length - 1];
+                    const strSequencia = sequenciaCarrinho.join(', '); 
+
+                    // Adiciona aos dados
+                    resultadosParaRelatorio.push({
+                        numeroCarrinho: numeroEsteCarrinhoInput,
+                        totalProdutos: tamanhoEsteCarrinho, // Nome interno da variável
+                        intervalo: `${primeiroNum} até ${ultimoNum}`,
+                        sequencia: strSequencia
+                    });
+
+                    // Adiciona ao HTML
+                    htmlResultado += `
+                        <div class="carrinho-resultado">
+                            <h3>Carrinho ${numeroEsteCarrinhoInput} (Total: ${tamanhoEsteCarrinho} tablets)</h3>
+                            <p><strong>Intervalo:</strong> ${primeiroNum} <strong>até</strong> ${ultimoNum}</p>
+                            <p><strong>Sequência:</strong> ${strSequencia}</p>
+                        </div>
+                    `;
+                    
+                    contadorBlocosGerados++;
+                }
+            }
+
+            // 7. Exibe o resultado final
+            let infoExcluidos = setExcluidos.size > 0 ? ` (pulando ${setExcluidos.size} número(s) definidos nas regras)` : "";
+            
+            // --- MODIFICADO AQUI --- (aqui também precisa?)
+            // Mantive "carrinhos definidos" pois o campo ainda é "tamanho-carrinhos"
+            // Se quiser mudar, me avise.
+            let resumo = `<p>Gerando <strong>${contadorBlocosGerados}</strong> blocos de tablets (de ${arrayTamanhos.length} carrinhos definidos), começando em ${numeroInicial}${infoExcluidos}.</p><hr>`;
+            
+            divResultado.innerHTML = resumo + htmlResultado;
+            
+            // Habilita os botões
+            btnBaixar.disabled = false;
+            btnBaixarPDF.disabled = false;
+        }
+
+        // --- FUNÇÃO DE DOWNLOAD .TXT ---
+        function baixarRelatorio() {
+            if (resultadosParaRelatorio.length === 0) {
+                alert("Nenhum relatório para baixar. Gere uma sequência primeiro.");
+                return;
+            }
+
+            // 1. Constrói o texto
+            let relatorioTexto = "RELATÓRIO DE GERAÇÃO DE CARRINHOS\n\n";
+            relatorioTexto += "Parâmetros:\n";
+            relatorioTexto += ` - Número Inicial: ${dadosParaRelatorio.numeroInicial}\n`;
+            // --- MODIFICADO AQUI ---
+            relatorioTexto += ` - Tablets por disciplina: ${dadosParaRelatorio.stringTamanhos}\n`;
+            relatorioTexto += ` - Números Excluídos: ${dadosParaRelatorio.stringExcluidos}\n\n`;
+            relatorioTexto += "----------------------------------------\n";
+            relatorioTexto += "Resultados:\n\n";
+
+            resultadosParaRelatorio.forEach(bloco => {
+                relatorioTexto += `Carrinho ${bloco.numeroCarrinho} (Total: ${bloco.totalProdutos} tablets)\n`;
+                relatorioTexto += `Intervalo: ${bloco.intervalo}\n\n`; 
+            });
+
+            // 2. Download
+            const blob = new Blob(["\uFEFF" + relatorioTexto], { type: 'text/plain;charset=utf-8' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.href = url;
+            const dataHoje = new Date().toISOString().split('T')[0];
+            link.download = `relatorio_carrinhos_${dataHoje}.txt`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // --- FUNÇÃO DE DOWNLOAD .PDF ---
+        function baixarRelatorioPDF() {
+            if (resultadosParaRelatorio.length === 0) {
+                alert("Nenhum relatório para baixar. Gere uma sequência primeiro.");
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const dataHoje = new Date().toLocaleDateString("pt-BR", {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit'
+            });
+            const dataHojeSimples = new Date().toISOString().split('T')[0];
+            const nomeArquivo = `relatorio_carrinhos_${dataHojeSimples}.pdf`;
+
+            // Layout
+            const margin = 15;
+            const pageHeight = doc.internal.pageSize.height;
+            const contentWidth = doc.internal.pageSize.width - (margin * 2);
+            let y = 0; 
+            let pageNum = 1;
+
+            // Header
+            const addHeader = (titulo) => {
+                doc.setFont("Helvetica", "bold");
+                doc.setFontSize(16);
+                doc.setTextColor(40, 40, 40);
+                doc.text(titulo, margin, 20);
+
+                doc.setFont("Helvetica", "normal");
+                doc.setFontSize(10);
+                doc.setTextColor(100, 100, 100);
+                doc.text(`Gerado em: ${dataHoje}`, margin, 27);
+
+                doc.setFillColor(0, 123, 255);
+                doc.rect(margin, 30, contentWidth, 1, 'F');
+                y = 40; 
+            };
+
+            // Footer
+            const addFooter = () => {
+                doc.setFont("Helvetica", "normal");
+                doc.setFontSize(10);
+                doc.setTextColor(150, 150, 150);
+                doc.text(`Página ${pageNum}`, doc.internal.pageSize.width / 2, pageHeight - 10, { align: "center" });
+            };
+
+            // Quebra de página
+            const checkAddPage = (alturaAdicional = 20) => {
+                if (y + alturaAdicional > pageHeight - 20) {
+                    addFooter();
+                    doc.addPage();
+                    pageNum++;
+                    y = 0; 
+                    addHeader("RELATÓRIO DE GERAÇÃO DE CARRINHOS");
+                }
+            };
+
+            // 1. Primeira Página
+            addHeader("RELATÓRIO DE GERAÇÃO DE CARRINHOS");
+            
+            // 2. Seção de Parâmetros
+            doc.setFont("Helvetica", "bold");
+            doc.setFontSize(12);
+            doc.setTextColor(0, 86, 179);
+            doc.text("Parâmetros de Geração", margin, y);
+            y += 7;
+
+            doc.setFont("Helvetica", "bold");
+            doc.setFontSize(10);
+            doc.text("Número Inicial:", margin, y);
+            doc.setFont("Helvetica", "normal");
+            doc.text(String(dadosParaRelatorio.numeroInicial), margin + 40, y);
+            y += 6;
+
+            // --- MODIFICADO AQUI ---
+            doc.setFont("Helvetica", "bold");
+            doc.text("Tablets por disciplina:", margin, y);
+            doc.setFont("Helvetica", "normal");
+            doc.text(dadosParaRelatorio.stringTamanhos, margin + 40, y, { maxWidth: contentWidth - 40 });
+            y += (doc.splitTextToSize(dadosParaRelatorio.stringTamanhos, contentWidth - 40).length * 5) + 3; 
+
+            doc.setFont("Helvetica", "bold");
+            doc.text("Números Excluídos:", margin, y);
+            doc.setFont("Helvetica", "normal");
+            doc.text(dadosParaRelatorio.stringExcluidos, margin + 40, y, { maxWidth: contentWidth - 40 });
+            y += (doc.splitTextToSize(dadosParaRelatorio.stringExcluidos, contentWidth - 40).length * 5) + 3;
+
+            y += 5; // Espaçamento
+
+            // 3. Seção de Resultados
+            doc.setFont("Helvetica", "bold");
+            doc.setFontSize(12);
+            doc.setTextColor(0, 86, 179);
+            doc.text("Resultados Gerados", margin, y);
+            y += 8;
+
+            // Loop pelos resultados
+            for (const bloco of resultadosParaRelatorio) {
+                
+                let alturaEstimada = 30; 
+                checkAddPage(alturaEstimada); 
+
+                // --- Desenha o bloco ---
+                doc.setFont("Helvetica", "bold");
+                doc.setFontSize(11);
+                doc.setTextColor(40, 40, 40);
+                doc.text(`Carrinho ${bloco.numeroCarrinho} (Total: ${bloco.totalProdutos} tablets)`, margin, y);
+                y += 7;
+
+                doc.setFont("Helvetica", "bold");
+                doc.setFontSize(10);
+                doc.text("Intervalo:", margin + 2, y);
+                doc.setFont("Helvetica", "normal");
+                doc.text(bloco.intervalo, margin + 22, y);
+                y += 6;
+
+                // Linha divisória
+                doc.setDrawColor(200, 200, 200); // Cinza
+                doc.line(margin, y, margin + contentWidth, y);
+                y += 8;
+            }
+
+            // 4. Adiciona o rodapé final
+            addFooter();
+
+            // 5. Salva o arquivo
+            doc.save(nomeArquivo);
+        }
+
+        // Executa a função quando o DOM estiver pronto
+        document.addEventListener('DOMContentLoaded', gerarSequencia);
+    </script>
+
+</body>
+</html>
