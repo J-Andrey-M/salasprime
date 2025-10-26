@@ -8,7 +8,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
     <style>
-        /* CSS (Idêntico ao anterior) */
+        /* CSS */
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background-color: #f4f4f9;
@@ -132,9 +132,9 @@
     <script>
         // --- Variáveis Globais ---
         let dadosParaRelatorio = {};
-        let resultadosParaRelatorio = [];
+        let resultadosParaRelatorio = []; // Agora armazena objetos com {nomeCarrinho, ...}
 
-        // --- Função Principal ---
+        // --- Função Principal (MODIFICADA) ---
         function gerarSequencia() {
             // 1. Pega os valores
             const numeroInicial = parseInt(document.getElementById('numero-inicial').value);
@@ -167,7 +167,7 @@
                 return;
             }
 
-            // 4. Processa a string de NÚMEROS A EXCLUIR
+            // 4. Processa a string de NÚMEROS A EXCLUIR (sem alteração)
             const setExcluidos = new Set();
             if (stringExcluidos.trim() !== '') {
                 const regras = stringExcluidos.split(',');
@@ -187,7 +187,7 @@
                 });
             }
 
-            // 5. LÓGICA PRINCIPAL
+            // 5. LÓGICA PRINCIPAL (MODIFICADA)
             let htmlResultado = ""; 
             let numeroAtual = numeroInicial;
             let contadorBlocosGerados = 0;
@@ -198,27 +198,56 @@
                 stringTamanhos: stringTamanhos,
                 stringExcluidos: stringExcluidos.trim() === '' ? 'Nenhum' : stringExcluidos
             };
+            
+            const MAX_CARRINHO = 48;
 
-            // Loop principal
+            // Loop principal (itera sobre os inputs: ex: 120, 51)
             for (let i = 0; i < arrayTamanhos.length; i++) {
                 
                 const tamanhoInput = arrayTamanhos[i]; 
-                const numeroEsteCarrinhoInput = i + 1;
+                const numeroBaseCarrinho = i + 1; // Ex: 1, 2, 3...
 
-                let tamanhosParaProcessar = [];
+                // --- INÍCIO DA LÓGICA DE DIVISÃO MODIFICADA ---
+                
+                let blocosParaProcessar = []; // Array de objetos {nome, tamanho}
 
-                if (tamanhoInput > 48) {
-                    const metade1 = Math.floor(tamanhoInput / 2);
-                    const metade2 = Math.ceil(tamanhoInput / 2);
-                    tamanhosParaProcessar = [metade1, metade2];
+                // 1. Calcula quantos carrinhos reais serão necessários
+                const numCarrinhos = Math.ceil(tamanhoInput / MAX_CARRINHO);
+
+                if (numCarrinhos <= 1) {
+                    // Não precisa dividir (tamanhoInput é <= 48)
+                    blocosParaProcessar.push({ 
+                        nome: `Carrinho ${numeroBaseCarrinho}`, 
+                        tamanho: tamanhoInput 
+                    });
                 } else {
-                    tamanhosParaProcessar = [tamanhoInput];
-                }
+                    // Precisa dividir (Ex: 120 tablets / 3 carrinhos = 40 cada)
+                    let tamanhoBase = Math.floor(tamanhoInput / numCarrinhos);
+                    let resto = tamanhoInput % numCarrinhos;
 
-                // Loop interno
-                for (let j = 0; j < tamanhosParaProcessar.length; j++) {
+                    for (let j = 1; j <= numCarrinhos; j++) {
+                        let tamanhoEsteBloco = tamanhoBase;
+                        if (resto > 0) {
+                            tamanhoEsteBloco++;
+                            resto--;
+                        }
+                        
+                        // Nomenclatura nova: Ex: "Carrinho 1.1", "Carrinho 1.2"
+                        blocosParaProcessar.push({
+                            nome: `Carrinho ${numeroBaseCarrinho}.${j}`,
+                            tamanho: tamanhoEsteBloco
+                        });
+                    }
+                }
+                // --- FIM DA LÓGICA DE DIVISÃO MODIFICADA ---
+
+
+                // Loop interno (agora itera sobre os blocos calculados)
+                for (let j = 0; j < blocosParaProcessar.length; j++) {
                     
-                    const tamanhoEsteCarrinho = tamanhosParaProcessar[j];
+                    const bloco = blocosParaProcessar[j];
+                    const tamanhoEsteCarrinho = bloco.tamanho;
+                    const nomeEsteCarrinho = bloco.nome;
                     const sequenciaCarrinho = []; 
 
                     while (sequenciaCarrinho.length < tamanhoEsteCarrinho) {
@@ -233,22 +262,22 @@
                     }
 
                     // 6. Formata o resultado
-                    const primeiroNum = sequenciaCarrinho[0];
-                    const ultimoNum = sequenciaCarrinho[sequenciaCarrinho.length - 1];
+                    const primeiroNum = sequenciaCarrinho.length > 0 ? sequenciaCarrinho[0] : "N/A";
+                    const ultimoNum = sequenciaCarrinho.length > 0 ? sequenciaCarrinho[sequenciaCarrinho.length - 1] : "N/A";
                     const strSequencia = sequenciaCarrinho.join(', '); 
 
-                    // Adiciona aos dados
+                    // Adiciona aos dados (usando o novo nome)
                     resultadosParaRelatorio.push({
-                        numeroCarrinho: numeroEsteCarrinhoInput,
-                        totalProdutos: tamanhoEsteCarrinho, // Nome interno da variável
+                        nomeCarrinho: nomeEsteCarrinho, // MODIFICADO
+                        totalProdutos: tamanhoEsteCarrinho,
                         intervalo: `${primeiroNum} até ${ultimoNum}`,
                         sequencia: strSequencia
                     });
 
-                    // Adiciona ao HTML
+                    // Adiciona ao HTML (usando o novo nome)
                     htmlResultado += `
                         <div class="carrinho-resultado">
-                            <h3>Carrinho ${numeroEsteCarrinhoInput} (Total: ${tamanhoEsteCarrinho} tablets)</h3>
+                            <h3>${nomeEsteCarrinho} (Total: ${tamanhoEsteCarrinho} tablets)</h3>
                             <p><strong>Intervalo:</strong> ${primeiroNum} <strong>até</strong> ${ultimoNum}</p>
                             <p><strong>Sequência:</strong> ${strSequencia}</p>
                         </div>
@@ -261,10 +290,7 @@
             // 7. Exibe o resultado final
             let infoExcluidos = setExcluidos.size > 0 ? ` (pulando ${setExcluidos.size} número(s) definidos nas regras)` : "";
             
-            // --- MODIFICADO AQUI --- (aqui também precisa?)
-            // Mantive "carrinhos definidos" pois o campo ainda é "tamanho-carrinhos"
-            // Se quiser mudar, me avise.
-            let resumo = `<p>Gerando <strong>${contadorBlocosGerados}</strong> blocos de tablets (de ${arrayTamanhos.length} carrinhos definidos), começando em ${numeroInicial}${infoExcluidos}.</p><hr>`;
+            let resumo = `<p>Gerando <strong>${contadorBlocosGerados}</strong> blocos de tablets (de ${arrayTamanhos.length} disciplinas definidas), começando em ${numeroInicial}${infoExcluidos}.</p><hr>`;
             
             divResultado.innerHTML = resumo + htmlResultado;
             
@@ -273,7 +299,7 @@
             btnBaixarPDF.disabled = false;
         }
 
-        // --- FUNÇÃO DE DOWNLOAD .TXT ---
+        // --- FUNÇÃO DE DOWNLOAD .TXT (MODIFICADA) ---
         function baixarRelatorio() {
             if (resultadosParaRelatorio.length === 0) {
                 alert("Nenhum relatório para baixar. Gere uma sequência primeiro.");
@@ -284,14 +310,14 @@
             let relatorioTexto = "RELATÓRIO DE GERAÇÃO DE CARRINHOS\n\n";
             relatorioTexto += "Parâmetros:\n";
             relatorioTexto += ` - Número Inicial: ${dadosParaRelatorio.numeroInicial}\n`;
-            // --- MODIFICADO AQUI ---
             relatorioTexto += ` - Tablets por disciplina: ${dadosParaRelatorio.stringTamanhos}\n`;
             relatorioTexto += ` - Números Excluídos: ${dadosParaRelatorio.stringExcluidos}\n\n`;
             relatorioTexto += "----------------------------------------\n";
             relatorioTexto += "Resultados:\n\n";
 
             resultadosParaRelatorio.forEach(bloco => {
-                relatorioTexto += `Carrinho ${bloco.numeroCarrinho} (Total: ${bloco.totalProdutos} tablets)\n`;
+                // MODIFICADO: Usa 'nomeCarrinho'
+                relatorioTexto += `${bloco.nomeCarrinho} (Total: ${bloco.totalProdutos} tablets)\n`; 
                 relatorioTexto += `Intervalo: ${bloco.intervalo}\n\n`; 
             });
 
@@ -308,7 +334,7 @@
             URL.revokeObjectURL(url);
         }
 
-        // --- FUNÇÃO DE DOWNLOAD .PDF ---
+        // --- FUNÇÃO DE DOWNLOAD .PDF (MODIFICADA) ---
         function baixarRelatorioPDF() {
             if (resultadosParaRelatorio.length === 0) {
                 alert("Nenhum relatório para baixar. Gere uma sequência primeiro.");
@@ -384,7 +410,6 @@
             doc.text(String(dadosParaRelatorio.numeroInicial), margin + 40, y);
             y += 6;
 
-            // --- MODIFICADO AQUI ---
             doc.setFont("Helvetica", "bold");
             doc.text("Tablets por disciplina:", margin, y);
             doc.setFont("Helvetica", "normal");
@@ -416,7 +441,8 @@
                 doc.setFont("Helvetica", "bold");
                 doc.setFontSize(11);
                 doc.setTextColor(40, 40, 40);
-                doc.text(`Carrinho ${bloco.numeroCarrinho} (Total: ${bloco.totalProdutos} tablets)`, margin, y);
+                // MODIFICADO: Usa 'nomeCarrinho'
+                doc.text(`${bloco.nomeCarrinho} (Total: ${bloco.totalProdutos} tablets)`, margin, y);
                 y += 7;
 
                 doc.setFont("Helvetica", "bold");
